@@ -55,8 +55,7 @@ repl(Db) ->
     io:format("~p~n",[R]),
     case R of
 	{'end'} -> ok;
-	_ ->
-	    repl(Db)
+	_ -> repl(Db)
     end.
 
 
