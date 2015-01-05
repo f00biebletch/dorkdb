@@ -38,7 +38,6 @@ handle_call(Cmd={get, K},
 handle_call({set, K, V}, _From, 
             State=#state{journal=[]}) ->
     % exec command
-    io:format("got set!!~n",[]),
     {reply, V, do_set(K, V, State)};
 handle_call(Cmd={set, _K, V},
 	    _From, State=#state{journal=[Cur|Rest]}) ->
@@ -83,7 +82,7 @@ play_journal(Db=#state{journal=J}) ->
     lists:foldl(play_log, Db, J).
 
 play_log(Log, Db) ->
-    lists:foldl(fun(Cmd, Db) -> exec(Cmd, Db) end, Db, Log).
+    lists:foldl(fun(Cmd, Db1) -> exec(Cmd, Db1) end, Db, Log).
 
 exec(Cmd={set, K, V}, Db) -> do_set(K, V, Db);
 exec(Cmd={unset, K}, Db) -> do_unset(K, Db);
@@ -98,15 +97,19 @@ do_get(Key, Db) ->
 
 do_set(Key, Val, Db) -> 
     Db#state{data=dict:store(Key, Val, Db#state.data),
-	     index=dict:update_counter(Key, 1, Db#state.index)}.
+	     index=dict:update_counter(Val, 1, Db#state.index)}.
 
 do_unset(Key, Db) ->
+    Val = case dict:find(Key, Db#state.data) of
+	      error -> nothing;
+	      {ok, V} -> V
+	  end,
     Db#state{data=dict:erase(Key, Db#state.data),
-	     index=dict:update_counter(Key, -1, Db#state.index)}.
+	     index=dict:update_counter(Val, -1, Db#state.index)}.
 
 do_numequalto(Key, Db) ->
     case dict:find(Key, Db#state.index) of
-	error -> 0;
+	error -> -1;
 	{ok, V} -> V
     end.
 			  

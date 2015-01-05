@@ -13,10 +13,14 @@ parse(Line) ->
     %io:format("got ~p~n", [Line]),
     [C|Rest] = string:tokens(string:strip(Line, right, $\n), " "),
     Cmd = list_to_atom(string:to_lower(C)),
-    io:format("cmd = ~p", [Cmd]),
     case Rest of
 	[K] ->
-	    {Cmd, string:strip(K, right, $\n)};
+	    case Cmd of 
+		numequalto -> 
+		    {V, _} = string:to_integer(K),
+		    {Cmd, V};
+		_ -> {Cmd, K}
+	    end;
 	[K, V] -> 
 	    {Arg, _} = string:to_integer(V),
 	    {Cmd, K, Arg};
@@ -30,7 +34,7 @@ repl(Db) ->
 	    Input -> 
 		gen_server:call(Db, parse(Input), infinity)
 	end,
-    io:format("RESPONSE ~p~n",[R]),
+    io:format("~p~n",[R]),
     case R of
 	{done} -> ok;
 	_ ->
