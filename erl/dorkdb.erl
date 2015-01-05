@@ -25,42 +25,27 @@ terminate(_Reason, _State) ->
 
 %% only set and unset (mutate) commands go to journal
 %% for read commands, if no log, just exec, otherwise, play journal then exec
-handle_call({halt}, _From, State) -> 
-    stop(),
-    {reply, {done}, State};
+%% FIXIT genericize based on mutate/non-mutate commands along with jounral
+%% FIXIT assign to Cmd and invoke exec?
+handle_call({'end'}, _From, State) -> 
+    {reply, {'end'}, State};
 handle_call({get, K}, _From, State=#state{journal=[]}) ->
-    % fetch from db
     {reply, do_get(K, State), State};
-handle_call(Cmd={get, K},
-	    _From, State) ->
-    % fetch from db+journal, continue with db
+handle_call({get, K},_From, State) ->
     {reply, do_get(K, play_journal(State)), State};
-handle_call({set, K, V}, _From, 
-            State=#state{journal=[]}) ->
-    % exec command
+handle_call({set, K, V}, _From, State=#state{journal=[]}) ->
     {reply, V, do_set(K, V, State)};
-handle_call(Cmd={set, _K, V},
-	    _From, State=#state{journal=[Cur|Rest]}) ->
-    % add command to log
+handle_call(Cmd={set, _K, V}, _From, State=#state{journal=[Cur|Rest]}) ->
     {reply, V, State#state{journal=[[Cmd|Cur]|Rest]}};
-handle_call({unset, K}, _From, 
-            State=#state{journal=[]}) ->
-    % unset from db and continue
+handle_call({unset, K}, _From, State=#state{journal=[]}) ->
     {reply, ok, do_unset(K, State)};
-handle_call(Cmd={unset, K}, _From, 
-            State=#state{journal=[Cur|Rest]}) ->
-    % add command to log
+handle_call(Cmd={unset, K}, _From, State=#state{journal=[Cur|Rest]}) ->
     {reply, K, State#state{journal=[[Cmd|Cur]|Rest]}};
-handle_call({numequalto, V}, _From, 
-            State=#state{journal=[]}) ->
-    % no transaction, just read
+handle_call({numequalto, V}, _From, State=#state{journal=[]}) ->
     {reply, do_numequalto(V, State), State};
-handle_call(Cmd = {numequalto, V}, _From, 
-            State) ->
-    % exec log but continue with uncommitted db
+handle_call({numequalto, V}, _From, State) ->
     {reply, do_numequalto(V, play_journal(State)), State};
-handle_call(transaction, _From, 
-            State=#state{journal=Cur}) ->
+handle_call(transaction, _From, State=#state{journal=Cur}) ->
     {reply, ok, State#state{journal=[journal:new()|Cur]}};
 handle_call(Msg, _From, State) ->
     io:format("BAH!!~n",[]),
@@ -84,10 +69,10 @@ play_journal(Db=#state{journal=J}) ->
 play_log(Log, Db) ->
     lists:foldl(fun(Cmd, Db1) -> exec(Cmd, Db1) end, Db, Log).
 
-exec(Cmd={set, K, V}, Db) -> do_set(K, V, Db);
-exec(Cmd={unset, K}, Db) -> do_unset(K, Db);
-exec(Cmd={numequalto, K}, Db) -> do_numequalto(K, Db);
-exec(Cmd={get, K}, Db) -> do_get(K, Db).
+exec({set, K, V}, Db) -> do_set(K, V, Db);
+exec({unset, K}, Db) -> do_unset(K, Db);
+exec({numequalto, K}, Db) -> do_numequalto(K, Db);
+exec({get, K}, Db) -> do_get(K, Db).
 
 do_get(Key, Db) -> 
     case dict:find(Key, Db#state.data) of
@@ -105,7 +90,7 @@ do_unset(Key, Db) ->
 	      {ok, V} -> V
 	  end,
     Db#state{data=dict:erase(Key, Db#state.data),
-	     index=dict:update_counter(Val, -1, Db#state.index)}.
+	     index=dict:update_counter(Val, 0, Db#state.index)}.
 
 do_numequalto(Key, Db) ->
     case dict:find(Key, Db#state.index) of
@@ -114,6 +99,6 @@ do_numequalto(Key, Db) ->
     end.
 			  
 other_numequalto(To, Db) ->
-    dict:fold(fun(K,V,Acc) -> case (K == V) of true -> Acc+1; _ -> Acc end end, 0, Db#state.data).
+    dict:fold(fun(_K,V,Acc) -> case (V == To) of true -> Acc+1; _ -> Acc end end, 0, Db#state.data).
 
     

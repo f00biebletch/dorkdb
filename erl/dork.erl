@@ -3,6 +3,7 @@
 -export([start/0, stop/0]).
 
 start() ->
+    process_flag(trap_exit, true),
     {ok, Db} = dorkdb:start_link(),
     repl(Db).
 
@@ -10,33 +11,50 @@ stop() ->
     dorkdb:stop().
 
 parse(Line) ->
-    %io:format("got ~p~n", [Line]),
     [C|Rest] = string:tokens(string:strip(Line, right, $\n), " "),
     Cmd = list_to_atom(string:to_lower(C)),
-    case Rest of
-	[K] ->
-	    case Cmd of 
-		numequalto -> 
-		    {V, _} = string:to_integer(K),
-		    {Cmd, V};
-		_ -> {Cmd, K}
-	    end;
-	[K, V] -> 
-	    {Arg, _} = string:to_integer(V),
-	    {Cmd, K, Arg};
-	[] -> {Cmd}
+    case Cmd of
+	get -> 
+	    [Key|[]] = Rest,
+	    {get, Key};
+	set ->
+	    [Key|[Vals|[]]] = Rest,
+	    {Val, _} = string:to_integer(Vals),
+	    {set, Key, Val};
+	unset ->
+	    [Key|[]] = Rest,
+	    {unset, Key};
+	numequalto ->
+	    [Vals|[]] = Rest,
+	    {Val, _} = string:to_integer(Vals),
+	    {numequalto, Val};
+	'end' ->
+	    {'end'};
+	'begin' ->
+	    {'begin'};
+	commit ->
+	    {commit};
+	rollback ->
+	    {rollback};
+	Other ->
+	    {badmatch, Other}
     end.
 
 repl(Db) ->
     R = case io:get_line(standard_io, "dork>") of
-	    eof -> {done};
-	    {error, _Term} -> {done};
-	    Input -> 
-		gen_server:call(Db, parse(Input), infinity)
+	    eof -> {'end'};
+	    {error, _Term} -> {'end'};
+	    Input ->
+		case catch parse(Input) of
+		    {'EXIT', E} ->
+			{badmatch, E};
+		    Cmd ->
+			gen_server:call(Db, Cmd, infinity)
+		end
 	end,
     io:format("~p~n",[R]),
     case R of
-	{done} -> ok;
+	{'end'} -> ok;
 	_ ->
 	    repl(Db)
     end.
